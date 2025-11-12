@@ -83,6 +83,56 @@ The script will:
 
 Press `Ctrl+C` to stop the script.
 
+## Running with Watchdog (Recommended for Production)
+
+For unattended, continuous operation, use the **watchdog** to monitor and automatically restart the color_capture script if it crashes:
+
+### Quick Start
+
+```powershell
+.\run_watchdog.bat
+```
+
+Or in PowerShell:
+```powershell
+.\run_watchdog.ps1
+```
+
+### What the Watchdog Does
+
+- **Monitors** the color_capture.py process continuously
+- **Auto-restarts** if the process crashes or is killed
+- **Exponential backoff** - gradually increases delay between restart attempts
+- **Graceful shutdown** - Press Ctrl+C to cleanly stop both watchdog and process
+- **Detailed logging** - Shows timestamps and status of all events
+
+### Command-Line Options
+
+```powershell
+python watchdog.py --interval 10          # Check every 10 seconds (default: 5)
+python watchdog.py --max-attempts 20      # Restart up to 20 times (default: 10)
+python watchdog.py --script custom.py     # Monitor a different script
+```
+
+### Example Output
+
+```
+============================================================
+Iteration 1 | Time: 16:53:04
+============================================================
+Found 13 color-matching rectangle(s)
+[OK] 1 rectangle(s) passed OCR filter, saving to disk...
+[OK] Clicked 1 rectangle(s), cursor restored
+
+[Process dies unexpectedly]
+
+[2025-11-11 16:24:15] [WARNING] Process is not running!
+[2025-11-11 16:24:15] [INFO] Waiting 2s before restart...
+[2025-11-11 16:24:17] [INFO] Process started with PID 12346 (Restart #2)
+```
+
+See `WATCHDOG.md` for detailed documentation.
+
 ## Output
 
 Captured images are saved in the `captures/` folder with names like:
