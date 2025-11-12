@@ -176,8 +176,9 @@ class ColorCapture:
     
     def process_rectangles(self, screen, rectangles):
         """
-        Process rectangles: filter by OCR and collect valid ones in memory.
-        Returns only rectangles that pass the OCR filter (contain target text).
+        Process rectangles: filter by size and OCR, collect valid ones in memory.
+        Only runs OCR on rectangles within size constraints: 60px < w < 120px and 20px < h < 50px
+        Returns only rectangles that pass both size and OCR filters.
         """
         valid_captures = []
         
@@ -195,18 +196,23 @@ class ColorCapture:
                 if self.debug_mode:
                     print(f"  Rectangle [{idx}] at ({x}, {y}) size {w}x{h}:")
                 
-                # Check OCR filter
-                if self.contains_target_text(cropped):
-                    valid_captures.append({
-                        'image': cropped,
-                        'coords': (x, y, w, h),
-                        'index': idx
-                    })
-                    if self.debug_mode:
-                        print(f"    [PASS] will be stored")
+                # Check size constraints (only run OCR if within size range)
+                if 60 < w < 120 and 20 < h < 50:
+                    # Check OCR filter
+                    if self.contains_target_text(cropped):
+                        valid_captures.append({
+                            'image': cropped,
+                            'coords': (x, y, w, h),
+                            'index': idx
+                        })
+                        if self.debug_mode:
+                            print(f"    [PASS] size {w}x{h} within range, OCR passed, will be stored")
+                    else:
+                        if self.debug_mode:
+                            print(f"    [FAIL] size {w}x{h} within range, but OCR failed")
                 else:
                     if self.debug_mode:
-                        print(f"    [FAIL] discarded")
+                        print(f"    [SKIP] size {w}x{h} outside range (60<w<120, 20<h<50)")
         
         return valid_captures
     
