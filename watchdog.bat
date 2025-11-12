@@ -99,7 +99,8 @@ REM ============================================================================
 :main_loop
 
 REM Check if the color_capture process is still running
-tasklist /FI "WINDOWTITLE eq %COLOR_CAPTURE_WINDOW%*" 2>nul | find /I "python.exe" >nul
+REM We look for python.exe processes that have color_capture.py in their arguments
+wmic process where "name='python.exe' and commandline like '%%color_capture.py%%'" get processid 2>nul | find /I "processid" >nul
 set "PROCESS_RUNNING=!ERRORLEVEL!"
 
 if %PROCESS_RUNNING% equ 0 (
@@ -150,15 +151,15 @@ REM ============================================================================
     set /a RESTART_COUNT=!RESTART_COUNT!+1
     call :log "Starting color_capture.py (restart attempt !RESTART_COUNT!)"
     
-    REM Start the Python script in a new window
+    REM Start the Python script directly using venv python.exe
     cd /d "%SCRIPT_DIR%"
-    start "%COLOR_CAPTURE_WINDOW%" cmd /k "call %VENV_DIR%\Scripts\activate.bat && python %PYTHON_SCRIPT%"
+    start "%COLOR_CAPTURE_WINDOW%" "%VENV_DIR%\Scripts\python.exe" "%PYTHON_SCRIPT%"
     
     REM Give the process a moment to start
-    timeout /t 1 /nobreak >nul
+    timeout /t 2 /nobreak >nul
     
-    REM Verify it started
-    tasklist /FI "WINDOWTITLE eq %COLOR_CAPTURE_WINDOW%*" 2>nul | find /I "python.exe" >nul
+    REM Verify it started by checking if python.exe is running color_capture.py
+    wmic process where "name='python.exe' and commandline like '%%color_capture.py%%'" get processid 2>nul | find /I "processid" >nul
     if !ERRORLEVEL! equ 0 (
         call :log "Process started successfully"
     ) else (
