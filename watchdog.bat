@@ -17,7 +17,7 @@ set "RESTART_DELAY=2"
 set "CHECK_INTERVAL=2"
 set "MAX_RESTARTS=0"
 set "RESTART_COUNT=0"
-set "COLOR_CAPTURE_WINDOW=Color_Capture_Process"
+set "PROCESS_PID="
 
 REM Parse command line arguments
 :parse_args
@@ -151,17 +151,23 @@ REM ============================================================================
     set /a RESTART_COUNT=!RESTART_COUNT!+1
     call :log "Starting color_capture.py (restart attempt !RESTART_COUNT!)"
     
-    REM Start the Python script directly using venv python.exe
+    REM Start Python in a minimized window
     cd /d "%SCRIPT_DIR%"
-    start "%COLOR_CAPTURE_WINDOW%" "%VENV_DIR%\Scripts\python.exe" "%PYTHON_SCRIPT%"
+    start "Color Capture" /MIN "%VENV_DIR%\Scripts\python.exe" "%PYTHON_SCRIPT%"
     
-    REM Give the process a moment to start
-    timeout /t 2 /nobreak >nul
+    REM Give the process time to start
+    timeout /t 3 /nobreak >nul
     
-    REM Verify it started by checking if python.exe is running color_capture.py
-    wmic process where "name='python.exe' and commandline like '%%color_capture.py%%'" get processid 2>nul | find /I "processid" >nul
-    if !ERRORLEVEL! equ 0 (
-        call :log "Process started successfully"
+    REM Get the PID of the python process running color_capture.py
+    for /f "tokens=*" %%A in ('wmic process where "name=^"python.exe^" and commandline like ^"%%color_capture.py%%^"" get processid 2^>nul ^| find /V "processid"') do (
+        set "PROCESS_PID=%%A"
+    )
+    
+    REM Trim whitespace from PID
+    for /f "tokens=*" %%A in ('echo !PROCESS_PID!') do set "PROCESS_PID=%%A"
+    
+    if defined PROCESS_PID (
+        call :log "Process started successfully (PID: !PROCESS_PID!)"
     ) else (
         call :log_error "Process failed to start - will retry next cycle"
     )

@@ -1,289 +1,276 @@
-# Watchdog Documentation
+# Watchdog - Process Monitor and Auto-Restart
 
 ## Overview
 
-The watchdog is a process monitor that keeps `color_capture.py` running continuously. If the process crashes, is killed, or exits unexpectedly, the watchdog will automatically restart it.
-
-This is useful for production deployments where you need the color capture script to run unattended for long periods.
+The watchdog is a PowerShell-based monitoring system that continuously watches the `color_capture.py` Python process. If the process dies or is killed, the watchdog automatically restarts it, ensuring the script runs 24/7 without manual intervention.
 
 ## Features
 
-- **Automatic Restart**: Restarts the process if it crashes or is killed
-- **Health Checks**: Periodic checks to ensure the process is still running
-- **Exponential Backoff**: Gradually increases delay between restart attempts (prevents rapid restart loops)
-- **Max Attempt Limit**: Gives up after a configurable number of restart failures
-- **Graceful Shutdown**: Cleanly terminates the monitored process on user interrupt (Ctrl+C)
-- **Detailed Logging**: Timestamped logs show all events and status
-- **Configurable**: Command-line options to customize behavior
+- **Continuous Monitoring**: Checks every 2 seconds (configurable) if the Python process is running
+- **Auto-Restart**: Automatically restarts the Python script if it dies
+- **Detailed Logging**: Timestamped logs of all events (start, restart, errors)
+- **Execution Policy Bypass**: Uses batch launcher to avoid PowerShell execution policy restrictions
+- **Process Management**: Kills any existing instances before starting fresh
+- **Error Handling**: Graceful handling of process start/stop failures
+
+## Installation
+
+### 1. No Additional Software Required
+
+The watchdog requires only what you already have:
+
+- Windows PowerShell (built-in to Windows)
+- Python 3 with the color_capture.py script
+
+### 2. Verify Python is in PATH
+
+Before using the watchdog, ensure `python.exe` is accessible from the command line:
+
+```powershell
+python --version
+```
+
+If this fails, add Python to your system PATH environment variable.
 
 ## Usage
 
-### Method 1: Using Batch File (Recommended for Windows)
+### Quick Start (Recommended)
 
-```bash
-.\run_watchdog.bat
+Run the batch launcher from a Command Prompt or PowerShell:
+
+```cmd
+run_watchdog.bat
 ```
 
-This is the simplest way to run the watchdog. Double-click the batch file or run it from Command Prompt.
+This bypasses PowerShell execution policy and starts the watchdog.
 
-### Method 2: Using PowerShell
+### Alternative: Direct PowerShell
+
+If you have PowerShell execution policy set to allow scripts:
 
 ```powershell
-.\run_watchdog.ps1
+powershell -ExecutionPolicy Bypass -File run_watchdog.ps1
 ```
 
-Or with arguments:
+Or with custom parameters:
 
 ```powershell
-.\run_watchdog.ps1 -interval 10 -max-attempts 20
+powershell -ExecutionPolicy Bypass -File run_watchdog.ps1 `
+    -ScriptPath "color_capture.py" `
+    -CheckInterval 2 `
+    -RestartDelay 1 `
+    -LogFile "watchdog.log"
 ```
 
-### Method 3: Direct Python Execution
+## Configuration
 
-```bash
-python watchdog.py
+### Parameters
+
+Edit `run_watchdog.bat` or pass parameters to the PowerShell script:
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `ScriptPath` | `color_capture.py` | Path to the Python script to monitor |
+| `CheckInterval` | `2` | Seconds between process checks |
+| `RestartDelay` | `1` | Seconds to wait before restarting after crash |
+| `LogFile` | `watchdog.log` | Path to the log file |
+
+### Example: Faster Restart
+
+Edit `run_watchdog.bat`:
+
+```batch
+powershell.exe -ExecutionPolicy Bypass -NoProfile ^
+    -File "run_watchdog.ps1" ^
+    -ScriptPath "color_capture.py" ^
+    -CheckInterval 1 ^
+    -RestartDelay 0 ^
+    -LogFile "watchdog.log"
 ```
 
-### Command-Line Options
+This checks every 1 second and restarts immediately.
 
-Customize the watchdog behavior with these options:
+## Log File
 
-```bash
-python watchdog.py --script color_capture.py  # Script to monitor (default: color_capture.py)
-python watchdog.py --interval 10              # Check interval in seconds (default: 5)
-python watchdog.py --max-attempts 20          # Max restart attempts (default: 10)
+The watchdog creates a `watchdog.log` file with timestamped entries:
+
+```text
+[2025-11-11 14:30:45] ==========================================
+[2025-11-11 14:30:45] Watchdog started for: C:\...\color_capture.py
+[2025-11-11 14:30:45] Check interval: 2s, Restart delay: 1s
+[2025-11-11 14:30:45] Log file: C:\...\watchdog.log
+[2025-11-11 14:30:45] ==========================================
+[2025-11-11 14:30:45] Starting Python process: C:\...\color_capture.py
+[2025-11-11 14:30:46] Python process started successfully (PID: 12345)
+[2025-11-11 14:30:46] INFO: Python process (PID: 12345) is running
+[2025-11-11 14:30:52] WARNING: Python process (PID: 12345) is not running! Restart #1
+[2025-11-11 14:30:53] Killing existing Python process (PID: 12345)
+[2025-11-11 14:30:54] Starting Python process: C:\...\color_capture.py
+[2025-11-11 14:30:54] Python process started successfully (PID: 12346)
 ```
 
-#### Examples
+To monitor the log in real-time:
 
-```bash
-# Monitor with 10-second check interval
-python watchdog.py --interval 10
-
-# Monitor with up to 20 restart attempts before giving up
-python watchdog.py --max-attempts 20
-
-# Monitor a different script
-python watchdog.py --script my_capture_script.py
-
-# Combine options
-python watchdog.py --interval 3 --max-attempts 30 --script color_capture.py
+```powershell
+Get-Content watchdog.log -Wait
 ```
 
-## How It Works
+Or on Windows 10/11 with `tail` equivalent:
 
-### Start Phase
-1. Watchdog validates that `color_capture.py` exists
-2. Starts the first process
-3. Enters monitoring loop
-
-### Monitoring Loop
-1. Checks every `--interval` seconds (default: 5) if the process is running
-2. If running, continues checking
-3. If not running:
-   - Logs the unexpected death
-   - Captures any output/errors from the process
-   - Increments failure counter
-   - Waits with exponential backoff (1s, 2s, 4s, 8s, 16s, 30s max)
-   - Attempts to restart
-
-### Restart Strategy
-- **Attempt 1**: Restart immediately
-- **Attempt 2**: Wait 2 seconds, then restart
-- **Attempt 3**: Wait 4 seconds, then restart
-- **Attempt 4**: Wait 8 seconds, then restart
-- **Attempt 5+**: Wait up to 30 seconds, then restart
-- **Attempt 11+**: Give up (configurable with `--max-attempts`)
-
-### Shutdown Phase
-When you press Ctrl+C:
-1. Watchdog receives interrupt signal
-2. Logs shutdown notice
-3. Gracefully terminates the monitored process
-4. Exits with status 0 (success)
-
-## Exit Codes
-
-| Code | Meaning |
-|------|---------|
-| 0 | Successful execution or clean shutdown |
-| 1 | Fatal error (e.g., script not found, max restarts exceeded) |
-
-## Output Example
-
-```
-======================================================================
-WATCHDOG: Monitoring color_capture.py
-Press Ctrl+C to stop the watchdog and terminate the process
-======================================================================
-
-[WATCHDOG] Initialized
-[WATCHDOG] Monitoring: color_capture.py
-[WATCHDOG] Check interval: 5s
-[WATCHDOG] Max restart attempts: 10
-
-[2025-11-11 16:23:45] [INFO] Starting color_capture.py...
-[2025-11-11 16:23:45] [INFO] Process started with PID 12345 (Restart #1)
-
-[2025-11-11 16:24:15] [WARNING] Process is not running!
-[2025-11-11 16:24:15] [WARNING] Process died with exit code 1
-[2025-11-11 16:24:15] [INFO] Waiting 2s before restart...
-[2025-11-11 16:24:17] [INFO] Starting color_capture.py...
-[2025-11-11 16:24:17] [INFO] Process started with PID 12346 (Restart #2)
+```powershell
+powershell -Command "Get-Content watchdog.log -Tail 10 -Wait"
 ```
 
-## Advanced Usage
-
-### Running in Background (Windows)
-
-Create a shortcut to `run_watchdog.bat` and set it to:
-- Target: `C:\path\to\run_watchdog.bat`
-- Start in: `C:\path\to\Allow_Clicker_v2`
-- Run: `Minimized`
+## Running as a Service (Advanced)
 
 ### Windows Task Scheduler
 
-You can also schedule the watchdog to start automatically:
+To run the watchdog at system startup:
 
-1. Open Task Scheduler
-2. Create Basic Task
-3. Set trigger: "At startup"
-4. Set action: Start a program
-5. Program: `C:\path\to\.venv\Scripts\python.exe`
-6. Arguments: `watchdog.py`
-7. Start in: `C:\path\to\Allow_Clicker_v2`
+1. **Open Task Scheduler**: Press `Win+R`, type `taskschd.msc`, press Enter
+2. **Create New Task**: Right-click "Task Scheduler Library" → "Create Task"
+3. **General Tab**:
+   - Name: `Allow Clicker Watchdog`
+   - Check: "Run with highest privileges"
+   - Check: "Run whether user is logged in or not"
+4. **Triggers Tab**: Click "New..."
+   - Begin task: "At startup"
+   - Click "OK"
+5. **Actions Tab**: Click "New..."
+   - Action: "Start a program"
+   - Program: `C:\Windows\System32\cmd.exe`
+   - Arguments: `/c "C:\path\to\run_watchdog.bat"`
+   - Start in: `C:\path\to\Allow_Clicker_v2`
+   - Click "OK"
+6. **Conditions Tab**:
+   - Uncheck "Start the task only if the computer is on AC power"
+7. **Settings Tab**:
+   - Check: "Allow task to be queued"
+   - Check: "If the task is already running, then the following rule applies: Stop the existing instance"
 
-### Monitoring Multiple Scripts
+### Alternative: Create a Shortcut
 
-Run separate watchdog instances for different scripts:
+Create a shortcut to `run_watchdog.bat`:
 
-```bash
-python watchdog.py --script color_capture.py --interval 5
-python watchdog.py --script other_script.py --interval 5
-```
-
-Each watchdog will manage its own process independently.
-
-## Troubleshooting
-
-### "Script not found" Error
-
-**Problem**: Watchdog exits with "Script not found" error
-
-**Solution**: Ensure `color_capture.py` is in the same directory as `watchdog.py`
-
-### Process keeps restarting
-
-**Possible causes**:
-1. `color_capture.py` has a fatal error (check output)
-2. Dependencies are missing (check virtual environment)
-3. Configuration file is invalid
-
-**Solution**: 
-- Run `python color_capture.py` manually to see errors
-- Check virtual environment: `.venv\Scripts\activate`
-- Review debug output from watchdog logs
-
-### Watchdog uses too much CPU
-
-**Problem**: Watchdog consuming high CPU percentage
-
-**Solution**: Increase `--interval` value
-
-```bash
-python watchdog.py --interval 30  # Check every 30 seconds instead of 5
-```
-
-### Want to see detailed output
-
-**Problem**: Want to capture watchdog logs to a file
-
-**Solution**: Redirect output to file
-
-```bash
-python watchdog.py >> watchdog_log.txt 2>&1
-```
-
-## Performance Impact
-
-- **CPU**: Minimal - only checks process status every 5 seconds (configurable)
-- **Memory**: ~10-20 MB for watchdog process + monitored process memory
-- **Disk I/O**: None (except when restarting)
-
-## Security Notes
-
-- Watchdog runs with same permissions as the user who started it
-- No special privileges required
-- Process output is printed to console (may contain sensitive data)
+1. Right-click desktop → "New" → "Shortcut"
+2. Location: `C:\Windows\System32\cmd.exe /c "C:\path\to\run_watchdog.bat"`
+3. Name: `Allow Clicker Watchdog`
+4. Right-click shortcut → "Properties" → "Advanced" → Check "Run as administrator"
+5. Double-click to start
 
 ## Stopping the Watchdog
 
-### Method 1: Keyboard (Recommended)
-Press `Ctrl+C` in the watchdog console window. This will:
-- Stop the watchdog
-- Gracefully terminate the monitored process
-- Exit cleanly
+### From PowerShell
 
-### Method 2: Task Manager
-Select the Python process and click "End Task". This will:
-- Abruptly terminate both watchdog and monitored process
-- May leave processes in inconsistent state
+Press `Ctrl+C` in the watchdog window.
 
-### Method 3: Command Line (PowerShell/CMD)
-```bash
-# Find the process ID
-tasklist | find "python.exe"
+### Kill the Process
 
-# Kill the watchdog process
-taskkill /pid 12345 /t /f
+```powershell
+# Find the watchdog process
+Get-Process powershell | Where-Object { $_.CommandLine -like "*run_watchdog*" }
+
+# Kill it
+Stop-Process -Name powershell -Force
 ```
 
-## Integration with Production Setups
+### From Task Scheduler
 
-### With Windows Service
+Right-click the task → "Disable"
 
-To run as a Windows Service, use tools like:
-- **NSSM** (Non-Sucking Service Manager)
-- **pywin32** service wrapper
-- **WinSW** (Windows Service Wrapper)
+## Troubleshooting
 
-Example with NSSM:
-```bash
-nssm install AllowClickerWatchdog C:\path\to\.venv\Scripts\python.exe watchdog.py
-nssm start AllowClickerWatchdog
+### "Python script not found" Error
+
+**Problem**: Watchdog can't locate `color_capture.py`
+
+**Solution**: Ensure the script is in the same directory as `run_watchdog.bat`, or update the path in the batch file.
+
+### "Failed to start Python process" Error
+
+**Problem**: Python script starts but exits immediately
+
+**Check**:
+
+1. Run the script manually: `python color_capture.py`
+2. Check for errors in the output
+3. Verify all dependencies are installed: `pip install -r requirements.txt`
+4. Check the `watchdog.log` for specific error messages
+
+### Watchdog uses too much CPU
+
+**Problem**: Constant restarts in a loop
+
+**Check the log file** to see why Python exits immediately. Common causes:
+
+- Missing dependencies (Tesseract, OpenCV, etc.)
+- Invalid configuration in `color_capture.py`
+- Permission issues with output directories
+
+### Python.exe not found
+
+**Problem**: "python.exe not found" or similar error
+
+**Solution**:
+1. Verify Python is installed: `python --version` in Command Prompt
+2. If not found, reinstall Python and check "Add Python to PATH"
+3. Or modify the batch file to use full path: `C:\Python311\python.exe` (adjust version number)
+
+## Architecture
+
+### How It Works
+
+```
+run_watchdog.bat
+    ↓ (Bypasses execution policy)
+run_watchdog.ps1 (PowerShell script)
+    ↓ (Monitors process)
+color_capture.py (Python application)
 ```
 
-### With Docker
+### Process Flow
 
-```dockerfile
-FROM python:3.11
-WORKDIR /app
-COPY requirements.txt .
-RUN pip install -r requirements.txt
-COPY . .
-CMD ["python", "watchdog.py", "--interval", "10"]
-```
+1. Batch file launches PowerShell with execution policy bypass
+2. PowerShell script starts the Python process
+3. Watchdog enters infinite loop:
+   - Sleep for `CheckInterval` seconds
+   - Check if Python process is running
+   - If not running: wait `RestartDelay` seconds, then restart
+   - Log all events to `watchdog.log`
 
-## Development Notes
+## Best Practices
 
-The watchdog is implemented as a single Python file (`watchdog.py`) with the `ProcessWatchdog` class.
+1. **Run as Administrator**: Ensures process killing/starting works reliably
+2. **Monitor the Log**: Regularly check `watchdog.log` for crash patterns
+3. **Test Manually First**: Run `color_capture.py` directly to ensure it works
+4. **Use Task Scheduler**: For production deployments, run at system startup
+5. **Archive Logs**: Keep backups of `watchdog.log` for troubleshooting
 
-### Key Methods
+## Files
 
-- `start_process()`: Starts the monitored process
-- `check_process()`: Returns True if process is running
-- `handle_process_death()`: Called when process unexpectedly exits
-- `run()`: Main watchdog loop
+| File | Purpose |
+|------|---------|
+| `run_watchdog.bat` | Batch launcher (use this to start) |
+| `run_watchdog.ps1` | PowerShell watchdog script (called by batch) |
+| `WATCHDOG.md` | This documentation |
+| `watchdog.log` | Runtime log file (auto-created) |
 
-### Extending the Watchdog
+## Support
 
-To customize behavior, you can:
+### Common Questions
 
-1. Modify command-line arguments in `main()`
-2. Adjust exponential backoff logic in `run()`
-3. Add custom logging in `log()` method
-4. Implement health checks beyond just "is it running"
+**Q: Can I run multiple instances of the watchdog?**  
+A: Not recommended. Each watchdog will try to manage the same Python process, causing conflicts.
 
-## License
+**Q: Does the watchdog consume a lot of resources?**  
+A: No. It sleeps 99% of the time, only waking to check if the process is running.
 
-Same as Allow_Clicker_V2 project
+**Q: What if the Python script is supposed to exit?**  
+A: The watchdog will immediately restart it. If you want the script to stay off, stop the watchdog itself.
+
+**Q: Can I use this with other Python scripts?**  
+A: Yes. Modify `run_watchdog.bat` and change the `ScriptPath` parameter to point to a different script.
+
+## License & Attribution
+
+This watchdog script is provided as part of the Allow Clicker V2 project and uses standard Windows PowerShell.
