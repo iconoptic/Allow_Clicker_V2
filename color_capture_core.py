@@ -239,14 +239,14 @@ class ColorCapture:
     
     def click_captures(self, valid_captures):
         """
-        Click on the center of each captured rectangle and restore cursor position.
+        Click on the center of each captured rectangle, restore cursor to original position, then click once more.
         Uses AutoHotkey for better VM compatibility, falls back to PyAutoGUI if AHK unavailable.
         
         Args:
             valid_captures: List of capture dictionaries with 'coords' key
             
         Returns:
-            Number of successful clicks performed
+            Number of successful clicks performed (includes final click at original position)
         """
         if not valid_captures:
             return 0
@@ -391,5 +391,16 @@ class ColorCapture:
             if self.debug_mode:
                 print(f"  Restoring cursor to: ({original_x}, {original_y})")
             pyautogui.moveTo(original_x, original_y, duration=0.1)
+            
+            # Wait a moment for cursor to settle
+            time.sleep(0.2)
+            
+            # Click at the original cursor position
+            if self.debug_mode:
+                print(f"  Clicking at original cursor position: ({original_x}, {original_y})")
+            pyautogui.click(original_x, original_y, button='left')
+            
+            if self.debug_mode:
+                print(f"  Final click completed")
         
         return click_count
