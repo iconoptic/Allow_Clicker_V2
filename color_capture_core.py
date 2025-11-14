@@ -130,17 +130,22 @@ class ColorCapture:
             return ""
     
     def contains_target_text(self, image_bgr):
-        """Check if image contains the target text using OCR."""
+        """Check if image contains any of the target texts using OCR."""
         if not self.ocr_enabled:
             return True
         
         try:
             extracted_text = self.extract_text_from_image(image_bgr)
-            has_text = self.ocr_search_text.lower() in extracted_text.lower()
+            extracted_lower = extracted_text.lower()
+            
+            # Handle both string and list of search terms
+            search_terms = self.ocr_search_text if isinstance(self.ocr_search_text, list) else [self.ocr_search_text]
+            has_text = any(term.lower() in extracted_lower for term in search_terms)
             
             if self.debug_mode:
                 print(f"    OCR extracted: '{extracted_text.strip()}'")
-                print(f"    Contains '{self.ocr_search_text}': {has_text}")
+                search_terms_str = "', '".join(search_terms)
+                print(f"    Contains '{search_terms_str}': {has_text}")
             
             return has_text
         except Exception as e:
@@ -177,7 +182,7 @@ class ColorCapture:
     def process_rectangles(self, screen, rectangles):
         """
         Process rectangles: filter by size and OCR, collect valid ones in memory.
-        Only runs OCR on rectangles within size constraints: 60px < w < 120px and 20px < h < 50px
+        Only runs OCR on rectangles within size constraints: 60px < w < 200px and 20px < h < 50px
         Returns only rectangles that pass both size and OCR filters.
         """
         valid_captures = []
@@ -197,7 +202,7 @@ class ColorCapture:
                     print(f"  Rectangle [{idx}] at ({x}, {y}) size {w}x{h}:")
                 
                 # Check size constraints (only run OCR if within size range)
-                if 60 < w < 120 and 20 < h < 50:
+                if 60 < w < 200 and 20 < h < 50:
                     # Check OCR filter
                     if self.contains_target_text(cropped):
                         valid_captures.append({
@@ -212,7 +217,7 @@ class ColorCapture:
                             print(f"    [FAIL] size {w}x{h} within range, but OCR failed")
                 else:
                     if self.debug_mode:
-                        print(f"    [SKIP] size {w}x{h} outside range (60<w<120, 20<h<50)")
+                        print(f"    [SKIP] size {w}x{h} outside range (60<w<200, 20<h<50)")
         
         return valid_captures
     

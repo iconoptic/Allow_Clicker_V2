@@ -17,7 +17,7 @@ COLOR_REF_PATH = SCRIPT_DIR / "assets" / "color_ref.png"
 CAPTURES_DIR = SCRIPT_DIR / "captures"
 POLL_INTERVAL = 1  # seconds
 COLOR_TOLERANCE = 30  # tolerance for color matching (0-255)
-OCR_SEARCH_TEXT = "Allow"  # Text to search for in images
+OCR_SEARCH_TEXT = ["Allow", "Try Again", "Continue"]  # Text to search for in images (case-insensitive)
 OCR_ENABLED = True  # Set to False to disable OCR filtering
 DEBUG_MODE = True  # Enable detailed logging
 AUTO_CLICK_ENABLED = True  # Set to False to disable auto-clicking
@@ -39,7 +39,8 @@ def run_background_capture():
     print(f"OCR Filtering: {'ENABLED' if OCR_ENABLED else 'DISABLED'}")
     print(f"Debug Mode: {'ON' if DEBUG_MODE else 'OFF'}")
     if OCR_ENABLED:
-        print(f"Searching for text: '{OCR_SEARCH_TEXT}'")
+        search_texts = ", ".join(f"'{text}'" for text in OCR_SEARCH_TEXT)
+        print(f"Searching for text: {search_texts}")
     
     # Check AutoHotkey availability
     if USE_AUTOHOTKEY:
