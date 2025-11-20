@@ -9,7 +9,7 @@ import cv2
 import numpy as np
 from pathlib import Path
 
-from color_capture_core import ColorCapture, find_autohotkey_exe
+from color_capture_core import ColorCapture
 
 # Configuration
 SCRIPT_DIR = Path(__file__).resolve().parent
@@ -21,8 +21,8 @@ OCR_SEARCH_TEXT = ["Allow", "Try Again", "Continue"]  # Text to search for in im
 OCR_ENABLED = True  # Set to False to disable OCR filtering
 DEBUG_MODE = True  # Enable detailed logging
 AUTO_CLICK_ENABLED = True  # Set to False to disable auto-clicking
-CLICK_DELAY = 0.5  # Delay between cursor movement and click (seconds) - increased for reliability
-USE_AUTOHOTKEY = True  # Use AutoHotkey for clicks (better VM compatibility), falls back to PyAutoGUI
+CLICK_DELAY = 0.05  # Delay between cursor movement and click (seconds)
+USE_AUTOHOTKEY = False  # Use PyAutoGUI for clicks
 
 
 def get_screen_image():
@@ -41,14 +41,7 @@ def run_background_capture():
     if OCR_ENABLED:
         search_texts = ", ".join(f"'{text}'" for text in OCR_SEARCH_TEXT)
         print(f"Searching for text: {search_texts}")
-    
-    # Check AutoHotkey availability
-    if USE_AUTOHOTKEY:
-        ahk_exe = find_autohotkey_exe()
-        if ahk_exe:
-            print(f"AutoHotkey: FOUND at {ahk_exe}")
-        else:
-            print(f"AutoHotkey: NOT FOUND (will use PyAutoGUI fallback)")
+    print(f"Click method: PyAutoGUI")
     print()
     
     try:

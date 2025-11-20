@@ -6,67 +6,8 @@ import numpy as np
 import pytesseract
 import pyautogui
 import time
-import subprocess
-import tempfile
 from pathlib import Path
 from PIL import Image
-
-
-def find_autohotkey_exe():
-    """
-    Find AutoHotkey.exe in common installation locations.
-    
-    Returns:
-        str: Path to AutoHotkey.exe if found, 'AutoHotkey.exe' if in PATH, None otherwise
-    """
-    # Common AutoHotkey installation paths (checked first)
-    common_paths = [
-        Path("C:\\Program Files\\AutoHotkey\\v2\\AutoHotkey.exe"),  # AutoHotkey v2 (found on this system)
-        Path("C:\\Program Files\\AutoHotkey\\AutoHotkey.exe"),      # AutoHotkey v1
-        Path("C:\\Program Files (x86)\\AutoHotkey\\AutoHotkey.exe"),
-        Path(Path.home() / "AppData\\Local\\Programs\\AutoHotkey\\AutoHotkey.exe"),
-        Path("C:\\ProgramData\\AutoHotkey\\AutoHotkey.exe"),
-    ]
-    
-    for path in common_paths:
-        if path.exists():
-            return str(path)
-    
-    # Try to find in PATH using where command
-    try:
-        result = subprocess.run(
-            ["where", "AutoHotkey.exe"],
-            capture_output=True,
-            text=True,
-            timeout=2
-        )
-        if result.returncode == 0:
-            exe_path = result.stdout.strip().split('\n')[0]
-            return exe_path
-    except Exception:
-        pass
-    
-    # Try to find using python's shutil.which
-    import shutil
-    ahk_path = shutil.which("AutoHotkey.exe")
-    if ahk_path:
-        return ahk_path
-    
-    # If not found but executable might be in PATH, return just the name
-    # (subprocess will search PATH automatically)
-    try:
-        result = subprocess.run(
-            ["AutoHotkey.exe", "--version"],
-            capture_output=True,
-            text=True,
-            timeout=2
-        )
-        if result.returncode == 0:
-            return "AutoHotkey.exe"
-    except Exception:
-        pass
-    
-    return None
 
 
 class ColorCapture:
@@ -74,7 +15,7 @@ class ColorCapture:
     
     def __init__(self, color_ref_path, captures_dir, ocr_enabled=True, 
                  ocr_search_text="Allow", color_tolerance=30, debug_mode=True, click_delay=0.1,
-                 use_ahk=True, ahk_script_path=None):
+                 use_ahk=True):
         self.color_ref_path = Path(color_ref_path)
         self.captures_dir = Path(captures_dir)
         self.ocr_enabled = ocr_enabled
@@ -82,13 +23,7 @@ class ColorCapture:
         self.color_tolerance = color_tolerance
         self.debug_mode = debug_mode
         self.click_delay = click_delay  # Delay between cursor movement and click (seconds)
-        self.use_ahk = use_ahk  # Use AutoHotkey for clicks instead of PyAutoGUI
-        
-        # Set AHK script path (defaults to script directory)
-        if ahk_script_path:
-            self.ahk_script_path = Path(ahk_script_path)
-        else:
-            self.ahk_script_path = Path(__file__).parent / "click_helper.ahk"
+        self.use_ahk = use_ahk  # Use PyAutoGUI for clicks
         
         self.ref_color = None
         
@@ -240,7 +175,7 @@ class ColorCapture:
     def click_captures(self, valid_captures):
         """
         Click on the center of each captured rectangle, restore cursor to original position, then click once more.
-        Uses AutoHotkey for better VM compatibility, falls back to PyAutoGUI if AHK unavailable.
+        Uses PyAutoGUI for clicking.
         
         Args:
             valid_captures: List of capture dictionaries with 'coords' key
@@ -265,135 +200,27 @@ class ColorCapture:
                 center_y = y + h // 2
                 
                 if self.debug_mode:
-                    print(f"  Moving to ({center_x}, {center_y})...")
+                    print(f"  Clicking at ({center_x}, {center_y})...")
                 
-                # Move to position first, with small delay
-                pyautogui.moveTo(center_x, center_y, duration=0.1)
-                if self.debug_mode:
-                    after_move_x, after_move_y = pyautogui.position()
-                    print(f"  [DEBUG] Cursor after pyautogui.moveTo: ({after_move_x}, {after_move_y})")
-                
-                # Wait a bit for the move to complete
-                time.sleep(self.click_delay)
-                
-                # Click using AutoHotkey or PyAutoGUI
-                if self.use_ahk and self.ahk_script_path.exists():
-                    # Try to find and use AutoHotkey for more reliable VM clicks
-                    if self.debug_mode:
-                        print(f"  Clicking at ({center_x}, {center_y}) via AutoHotkey")
-                    try:
-                        # Find AutoHotkey executable
-                        ahk_exe = find_autohotkey_exe()
-                        if ahk_exe:
-                            # Call AutoHotkey script with coordinates and delay
-                            subprocess.run(
-                                [str(ahk_exe), str(self.ahk_script_path), str(center_x), str(center_y), str(int(self.click_delay * 1000))],
-                                check=True,
-                                timeout=5
-                            )
-                            time.sleep(0.05)  # Allow the AHK script time to write its log and perform clicks
-                            # Print current cursor post-click (for verification)
-                            curr_x, curr_y = pyautogui.position()
-                            if self.debug_mode:
-                                print(f"  [DEBUG] Cursor after AHK click: ({curr_x}, {curr_y})")
-                            # Attempt to read the AHK log in temp to verify coordinates clicked
-                            try:
-                                tmp_log = Path(tempfile.gettempdir()) / "allow_clicker_ahk.log"
-                                if tmp_log.exists():
-                                    # Print last 3 lines of the log.
-                                    with tmp_log.open('r', encoding='utf-8') as f:
-                                        lines = f.read().strip().splitlines()
-                                    if lines:
-                                        for log_line in lines[-3:]:
-                                            print(f"  [AHK LOG] {log_line}")
-                            except Exception as e:
-                                if self.debug_mode:
-                                    print(f"  [DEBUG] Could not read AHK log: {e}")
-                        else:
-                            if self.debug_mode:
-                                print(f"  [INFO] AutoHotkey.exe not found in PATH. Falling back to PyAutoGUI...")
-                            pyautogui.click(center_x, center_y, button='left')
-                    except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
-                        if self.debug_mode:
-                            print(f"  [WARNING] AutoHotkey execution failed: {e}. Falling back to PyAutoGUI...")
-                        # Fallback to PyAutoGUI if AHK fails
-                        pyautogui.click(center_x, center_y, button='left')
-                else:
-                    # Use PyAutoGUI as fallback
-                    if self.debug_mode:
-                        print(f"  Clicking at ({center_x}, {center_y}) via PyAutoGUI")
-                    pyautogui.click(center_x, center_y, button='left')
-                
-                # Small delay between clicks
-                time.sleep(0.05)
+                # Move and click directly with minimal delay
+                pyautogui.moveTo(center_x, center_y, duration=0.05)
+                time.sleep(0.01)  # Minimal delay before click
+                pyautogui.click(center_x, center_y, button='left')
+                time.sleep(0.01)  # Minimal delay between clicks
                 
                 click_count += 1
                 
                 if self.debug_mode:
                     print(f"  Click #{click_count} completed")
-                # Verify whether the click succeeded: re-OCR the area; if still present, try fallback
-                if self.ocr_enabled:
-                    # Small delay to allow UI update
-                    time.sleep(0.2)
-                    try:
-                        # Capture screen and crop to the rectangle
-                        full_scr = pyautogui.screenshot()
-                        scr_np = np.array(full_scr)
-                        scr_bgr = cv2.cvtColor(scr_np, cv2.COLOR_RGB2BGR)
-                        x, y, w, h = capture['coords']
-                        crop = scr_bgr[y:y+h, x:x+w]
-                        still_has = self.contains_target_text(crop)
-                        if still_has:
-                            if self.debug_mode:
-                                print(f"  [DEBUG] After click, target still present at ({x},{y},{w},{h}). Trying fallback click via PyAutoGUI.")
-                            # Try PyAutoGUI click as a fallback
-                            pyautogui.click(center_x, center_y, button='left')
-                            time.sleep(0.2)
-                            # Recheck again
-                            full_scr = pyautogui.screenshot()
-                            scr_np = np.array(full_scr)
-                            scr_bgr = cv2.cvtColor(scr_np, cv2.COLOR_RGB2BGR)
-                            crop = scr_bgr[y:y+h, x:x+w]
-                            still_has = self.contains_target_text(crop)
-                            if still_has:
-                                if self.debug_mode:
-                                    print(f"  [WARNING] Button still present after fallback click.")
-                                # Try sending Enter as a final attempt
-                                try:
-                                    pyautogui.press('enter')
-                                    time.sleep(0.15)
-                                    full_scr = pyautogui.screenshot()
-                                    scr_np = np.array(full_scr)
-                                    scr_bgr = cv2.cvtColor(scr_np, cv2.COLOR_RGB2BGR)
-                                    crop = scr_bgr[y:y+h, x:x+w]
-                                    still_has = self.contains_target_text(crop)
-                                    if still_has and self.debug_mode:
-                                        print(f"  [WARNING] Button still present after Enter key press.")
-                                except Exception as e:
-                                    if self.debug_mode:
-                                        print(f"  [DEBUG] Enter key fallback failed: {e}")
-                                # Save a full-screen debug capture after fallback
-                                try:
-                                    dbg_path = self.captures_dir / f"after_click_{int(time.time())}.png"
-                                    full = pyautogui.screenshot()
-                                    full.save(str(dbg_path))
-                                    if self.debug_mode:
-                                        print(f"  [DEBUG] Saved after-click screenshot to {dbg_path}")
-                                except Exception as e:
-                                    if self.debug_mode:
-                                        print(f"  [DEBUG] Failed saving after-click screenshot: {e}")
-                    except Exception as e:
-                        if self.debug_mode:
-                            print(f"  [DEBUG] Re-check after click failed: {e}")
         
         finally:
             # Always restore cursor to original position
             if self.debug_mode:
                 print(f"  Restoring cursor to: ({original_x}, {original_y})")
-            pyautogui.moveTo(original_x, original_y, duration=0.1)
+            pyautogui.moveTo(original_x, original_y, duration=0.05)
             
             # Wait a moment for cursor to settle
-            time.sleep(0.2)
+            time.sleep(0.05)
             
             # Click at the original cursor position
             if self.debug_mode:
