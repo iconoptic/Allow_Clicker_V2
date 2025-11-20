@@ -174,14 +174,14 @@ class ColorCapture:
     
     def click_captures(self, valid_captures):
         """
-        Click on the center of each captured rectangle, restore cursor to original position, then click once more.
+        Double-click on each captured rectangle to select the window, then restore cursor to original position.
         Uses PyAutoGUI for clicking.
         
         Args:
             valid_captures: List of capture dictionaries with 'coords' key
             
         Returns:
-            Number of successful clicks performed (includes final click at original position)
+            Number of successful double-clicks performed
         """
         if not valid_captures:
             return 0
@@ -200,18 +200,22 @@ class ColorCapture:
                 center_y = y + h // 2
                 
                 if self.debug_mode:
-                    print(f"  Clicking at ({center_x}, {center_y})...")
+                    print(f"  Double-clicking at ({center_x}, {center_y})...")
                 
-                # Move and click directly with minimal delay
+                # Move to target
                 pyautogui.moveTo(center_x, center_y, duration=0.05)
-                time.sleep(0.01)  # Minimal delay before click
+                time.sleep(0.01)
+                
+                # Double-click to select window and activate button
                 pyautogui.click(center_x, center_y, button='left')
-                time.sleep(0.01)  # Minimal delay between clicks
+                time.sleep(0.05)  # Delay between clicks in double-click
+                pyautogui.click(center_x, center_y, button='left')
+                time.sleep(0.01)  # Minimal delay between targets
                 
                 click_count += 1
                 
                 if self.debug_mode:
-                    print(f"  Click #{click_count} completed")
+                    print(f"  Double-click #{click_count} completed")
         
         finally:
             # Always restore cursor to original position
